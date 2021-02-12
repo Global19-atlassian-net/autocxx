@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use autocxx_parser::UnsafePolicy;
 use syn::{Attribute, FnArg, ForeignItem, ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type, TypePtr, Visibility, parse_quote, punctuated::Punctuated, token::Unsafe};
 
-use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, Use}, codegen_cpp::{AdditionalNeed, function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}}}, types::{Namespace, TypeName, make_ident}};
+use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, UnanalyzedApi, Use}, codegen_cpp::{AdditionalNeed, function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}}, parse::{overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker}}, types::{Namespace, TypeName, make_ident}};
 use quote::quote;
 
 use super::pod::PodAnalysis;
 
-pub(crate) struct FnAnalyzer;
 
 pub(crate) struct FnAnalysisBody {
     pub(crate) rename_using_rust_attr: Option<String>,
@@ -63,10 +63,72 @@ impl ApiAnalysis for FnAnalysis {
     type FunAnalysis = FnAnalysisBody;
 }
 
+pub(crate) struct FnAnalyzer {
+    unsafe_policy: UnsafePolicy,
+    rust_name_tracker: RustNameTracker,
+}
 
 impl FnAnalyzer {
-    pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>) -> Result<Vec<Api<FnAnalysis>>,ConvertError> {
+    pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>, unsafe_policy: UnsafePolicy) -> Result<Vec<Api<FnAnalysis>>,ConvertError> {
+        let me = Self {
+            unsafe_policy,
+            rust_name_tracker: RustNameTracker::new(),
+            
+        };
+        let mut results = Vec::new();
+        let mut overload_trackers_by_mod: HashMap<Namespace,OverloadTracker> = HashMap::new();
+        let mut extra_apis = Vec::new();
+        for api in apis {
+            if let Some(api) = me.analyze_fn_api(api, &mut extra_apis, &mut overload_trackers_by_mod)? {
+                results.push(api);
+            }
+        }
+        // TODO deal with exrta_apis
+        assert!(extra_apis.is_empty());
+        Ok(results)
+    }
 
+
+    fn analyze_fn_api(
+        &mut self,
+        api: Api<PodAnalysis>,
+        extra_apis: &mut Vec<UnanalyzedApi>,
+        overload_trackers_by_mod: &mut HashMap<Namespace,OverloadTracker>
+    ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
+        let mut new_deps = api.deps;
+        let api_detail = match api.detail {
+            // No changes to any of these...
+            ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
+            ApiDetail::StringConstructor => ApiDetail::StringConstructor,
+            ApiDetail::Function{ fun, analysis: _ } => {
+                let overload_tracker = overload_trackers_by_mod.entry(api.ns).or_default();
+                let analysis = self.analyze_foreign_fn(api, &fun, overload_tracker)?;
+                match analysis {
+                    None => return Ok(None),
+                    Some(analysis) => ApiDetail::Function { fun, analysis }
+                }
+            },
+            ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
+            ApiDetail::Typedef { type_item } => ApiDetail::Typedef { type_item },
+            ApiDetail::CType { id } => ApiDetail::CType { id },
+            // Just changes to this one...
+            ApiDetail::Type {
+                ty_details,
+                for_extern_c_ts,
+                is_forward_declaration,
+                bindgen_mod_item,
+                analysis,
+            } => ApiDetail::Type { ty_details, for_extern_c_ts, is_forward_declaration, bindgen_mod_item, analysis }
+        };
+        Ok(Some(Api {
+            ns: api.ns,
+            id: api.id,
+            use_stmt: api.use_stmt,
+            deps: new_deps,
+            id_for_allowlist: api.id_for_allowlist,
+            additional_cpp: api.additional_cpp,
+            detail: api_detail,
+        }))
     }
 
     fn convert_boxed_type(
@@ -88,10 +150,6 @@ impl FnAnalyzer {
 
     fn is_pod(&self, ty: &TypeName) -> bool {
         self.byvalue_checker.is_pod(ty)
-    }
-
-    fn add_api(&mut self, api: UnanalyzedApi) {
-        self.results.apis.push(api);
     }
 
     fn get_cxx_bridge_name(
@@ -120,20 +178,13 @@ impl FnAnalyzer {
     fn should_be_unsafe(&self) -> bool {
         self.unsafe_policy == UnsafePolicy::AllFunctionsUnsafe
     }
-    
-    fn get_function_real_name(&mut self, found_name: String) -> String {
-        self.overload_tracker.get_name(None, found_name)
-    }
 
-    fn get_method_real_name(&mut self, type_name: &str, found_name: String) -> String {
-        self.overload_tracker.get_name(Some(type_name), found_name)
-    }
-
-    fn convert_foreign_fn(
+    fn analyze_foreign_fn(
         &mut self,
         api: Api<PodAnalysis>,
         func_information: &FuncToConvert,
-    ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
+        overload_tracker: &mut OverloadTracker,
+    ) -> Result<Option<FnAnalysisBody>, ConvertError> {
         let fun = func_information.item;
         let virtual_this = func_information.virtual_this_type;
         let ns = &self.ns.clone();
@@ -236,7 +287,7 @@ impl FnAnalyzer {
             // with the original name, but we currently discard that impl section.
             // We want to feed cxx methods with just the method name, so let's
             // strip off the class name.
-            rust_name = self
+            rust_name = overload_tracker
                 .get_method_real_name(&type_ident, ideal_rust_name);
             if rust_name.starts_with(&type_ident) {
                 // It's a constructor. bindgen generates
@@ -257,7 +308,7 @@ impl FnAnalyzer {
         } else {
             // Not a method.
             // What shall we call this function? It may be overloaded.
-            rust_name = self
+            rust_name = overload_tracker
                 .get_function_real_name(ideal_rust_name);
         }
 
@@ -404,31 +455,20 @@ impl FnAnalyzer {
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis;
 
-        Ok(Some(Api {
-            ns: api.ns,
-            id: api.id,
-            use_stmt: Use::Unused, // TODO FILL IN!!
-            deps,
-            id_for_allowlist: None, // TODO FILL IN
-            additional_cpp,
-            detail: ApiDetail::Function {
-                fun: func_information.clone(),
-                analysis: FnAnalysisBody {
-                    rename_using_rust_attr,
-                    cxxbridge_name,
-                    rust_name,
-                    params,
-                    self_ty,
-                    ret_type,
-                    is_constructor,
-                    param_details,
-                    cpp_call_name,
-                    wrapper_function_needed,
-                    requires_unsafe,
-                    is_a_method,
-                    vis,
-                },
-            },
+        Ok(Some(FnAnalysisBody {
+            rename_using_rust_attr,
+            cxxbridge_name,
+            rust_name,
+            params,
+            self_ty,
+            ret_type,
+            is_constructor,
+            param_details,
+            cpp_call_name,
+            wrapper_function_needed,
+            requires_unsafe,
+            is_a_method,
+            vis,
         }))
     }
 

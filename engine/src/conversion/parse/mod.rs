@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod bridge_name_tracker;
-mod overload_tracker;
+pub(crate) mod bridge_name_tracker;
+pub(crate) mod overload_tracker;
 pub(crate) mod parse_bindgen;
 mod parse_foreign_mod;
-mod rust_name_tracker;
+pub(crate) mod rust_name_tracker;
 pub(crate) mod type_converter;
-pub(crate) mod unqualify; // TODO move
+pub(crate) mod unqualify; // TODO move many of these
 
 pub(crate) use parse_bindgen::ParseBindgen;

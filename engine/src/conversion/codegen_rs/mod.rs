@@ -15,6 +15,7 @@
 mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
+mod fun_codegen;
 
 use std::collections::HashMap;
 
@@ -27,10 +28,7 @@ use syn::{parse_quote, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
 use crate::types::{make_ident, Namespace};
 use impl_item_creator::create_impl_items;
 
-use self::{
-    namespace_organizer::{HasNs, NamespaceEntries},
-    non_pod_struct::new_non_pod_struct,
-};
+use self::{fun_codegen::gen_function, namespace_organizer::{HasNs, NamespaceEntries}, non_pod_struct::new_non_pod_struct};
 
 use super::{
     analysis::pod::PodAnalysis,
@@ -82,7 +80,7 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 (
-                    (api.ns, api.id, Self::generate_rs_for_api(api.detail)),
+                    (api.ns, api.id, Self::generate_rs_for_api(api.ns, api.detail)),
                     api.additional_cpp,
                 )
             })
@@ -260,7 +258,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(api_detail: ApiDetail<PodAnalysis>) -> RsCodegenResult {
+    fn generate_rs_for_api(ns: Namespace, api_detail: ApiDetail<PodAnalysis>) -> RsCodegenResult {
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -301,15 +299,9 @@ impl<'a> RsCodeGenerator<'a> {
                 }
             }
             ApiDetail::Function {
-                extern_c_mod_item,
-                impl_entry,
-            } => RsCodegenResult {
-                impl_entry,
-                global_items: Vec::new(),
-                bridge_items: Vec::new(),
-                extern_c_mod_item: Some(extern_c_mod_item),
-                bindgen_mod_item: None,
-            },
+                fun,
+                analysis
+            } => gen_function(ns, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,
@@ -367,6 +359,8 @@ impl<'a> RsCodeGenerator<'a> {
             }
         })]
     }
+
+    fn gen_function(&self, fun_analysis: )
 }
 
 impl HasNs for (Namespace, Ident, RsCodegenResult) {

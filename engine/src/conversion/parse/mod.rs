@@ -18,6 +18,6 @@ pub(crate) mod parse_bindgen;
 mod parse_foreign_mod;
 mod rust_name_tracker;
 pub(crate) mod type_converter;
-mod unqualify;
+pub(crate) mod unqualify; // TODO move
 
 pub(crate) use parse_bindgen::ParseBindgen;

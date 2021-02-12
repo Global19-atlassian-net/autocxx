@@ -108,6 +108,9 @@ impl<'a> BridgeConverter<'a> {
                 // versus which need to be opaque).
                 let analyzed_apis =
                     analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
+                // Next, figure out how we materialize different functions.
+                // Some will be simple entries in the cxx::bridge module; others will
+                // require C++ wrapper functions.
                 let analyzed_apis =
                     FnAnalyzer::analyze_functions(analyzed_apis)?;
                 // We now garbage collect the ones we don't need...

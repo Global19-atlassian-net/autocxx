@@ -14,13 +14,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use autocxx_parser::UnsafePolicy;
+use autocxx_parser::{TypeDatabase, UnsafePolicy};
 use syn::{Attribute, FnArg, ForeignItem, ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type, TypePtr, Visibility, parse_quote, punctuated::Punctuated, token::Unsafe};
 
-use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, UnanalyzedApi, Use}, codegen_cpp::{AdditionalNeed, function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}}, parse::{overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker}}, types::{Namespace, TypeName, make_ident}};
+use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, UnanalyzedApi, Use}, codegen_cpp::{AdditionalNeed, function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}}, parse::{bridge_name_tracker::BridgeNameTracker, overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker, type_converter::TypeConverter}}, known_types::TypeDatabase, types::{Namespace, TypeName, make_ident}};
 use quote::quote;
 
-use super::pod::PodAnalysis;
+use super::pod::{ByValueChecker, PodAnalysis};
 
 
 pub(crate) struct FnAnalysisBody {
@@ -63,28 +63,36 @@ impl ApiAnalysis for FnAnalysis {
     type FunAnalysis = FnAnalysisBody;
 }
 
-pub(crate) struct FnAnalyzer {
+pub(crate) struct FnAnalyzer<'a> {
     unsafe_policy: UnsafePolicy,
     rust_name_tracker: RustNameTracker,
+    extra_apis: Vec<UnanalyzedApi>,
+    type_converter: &'a mut TypeConverter,
+    bridge_name_tracker: BridgeNameTracker,
+    byvalue_checker: &'a ByValueChecker,
+    type_database: &'a TypeDatabase,
 }
 
-impl FnAnalyzer {
-    pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>, unsafe_policy: UnsafePolicy) -> Result<Vec<Api<FnAnalysis>>,ConvertError> {
+impl<'a> FnAnalyzer<'a> {
+    pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>, unsafe_policy: UnsafePolicy, type_converter: &'a mut TypeConverter, byvalue_checker: &'a ByValueChecker, type_database: &'a TypeDatabase) -> Result<Vec<Api<FnAnalysis>>,ConvertError> {
         let me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
-            
+            extra_apis: Vec::new(),
+            type_converter,
+            bridge_name_tracker: BridgeNameTracker::new(),
+            byvalue_checker,
+            type_database,
         };
         let mut results = Vec::new();
         let mut overload_trackers_by_mod: HashMap<Namespace,OverloadTracker> = HashMap::new();
-        let mut extra_apis = Vec::new();
         for api in apis {
-            if let Some(api) = me.analyze_fn_api(api, &mut extra_apis, &mut overload_trackers_by_mod)? {
+            if let Some(api) = me.analyze_fn_api(api, &mut overload_trackers_by_mod)? {
                 results.push(api);
             }
         }
         // TODO deal with exrta_apis
-        assert!(extra_apis.is_empty());
+        assert!(me.extra_apis.is_empty());
         Ok(results)
     }
 
@@ -92,7 +100,6 @@ impl FnAnalyzer {
     fn analyze_fn_api(
         &mut self,
         api: Api<PodAnalysis>,
-        extra_apis: &mut Vec<UnanalyzedApi>,
         overload_trackers_by_mod: &mut HashMap<Namespace,OverloadTracker>
     ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
         let mut new_deps = api.deps;
@@ -140,7 +147,7 @@ impl FnAnalyzer {
         let annotated =
             self.type_converter
                 .convert_boxed_type(ty, ns, convert_ptrs_to_reference)?;
-        self.results.apis.extend(annotated.extra_apis);
+        self.extra_apis.extend(annotated.extra_apis);
         Ok((
             annotated.ty,
             annotated.types_encountered,

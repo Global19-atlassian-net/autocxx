@@ -21,7 +21,7 @@ use quote::quote;
 
 use super::pod::PodAnalysis;
 
-struct FnAnalyzer;
+pub(crate) struct FnAnalyzer;
 
 pub(crate) struct FnAnalysisBody {
     pub(crate) rename_using_rust_attr: Option<String>,
@@ -65,6 +65,9 @@ impl ApiAnalysis for FnAnalysis {
 
 
 impl FnAnalyzer {
+    pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>) -> Result<Vec<Api<FnAnalysis>>,ConvertError> {
+
+    }
 
     fn convert_boxed_type(
         &mut self,

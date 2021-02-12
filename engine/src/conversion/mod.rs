@@ -21,6 +21,7 @@ mod conversion_tests;
 mod parse;
 mod utilities;
 
+use analysis::fun::FnAnalyzer;
 pub(crate) use api::ConvertError;
 use autocxx_parser::TypeDatabase;
 pub(crate) use codegen_cpp::type_to_cpp::type_to_cpp;
@@ -107,6 +108,8 @@ impl<'a> BridgeConverter<'a> {
                 // versus which need to be opaque).
                 let analyzed_apis =
                     analyze_pod_apis(parse_results.apis, &byvalue_checker, &mut type_converter)?;
+                let analyzed_apis =
+                    FnAnalyzer::analyze_functions(analyzed_apis)?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
                     analyzed_apis,

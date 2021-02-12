@@ -19,7 +19,7 @@ use crate::{conversion::{analysis::fun::{ArgumentAnalysis, FnAnalysis, FnAnalysi
 use crate::types::make_ident;
 use super::RsCodegenResult;
 
-pub(crate) fn gen_function(ns: Namespace, analysis: &FnAnalysisBody) -> RsCodegenResult {
+pub(crate) fn gen_function(ns: Namespace, analysis: FnAnalysisBody) -> RsCodegenResult {
     let rename_using_rust_attr = analysis.rename_using_rust_attr;
     let cxxbridge_name = analysis.cxxbridge_name;
     let rust_name = analysis.rust_name;

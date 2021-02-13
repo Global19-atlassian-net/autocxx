@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod fun_codegen;
 mod impl_item_creator;
 mod namespace_organizer;
 mod non_pod_struct;
-mod fun_codegen;
 
 use std::collections::HashMap;
 
@@ -28,9 +28,16 @@ use syn::{parse_quote, ForeignItem, Ident, Item, ItemForeignMod, ItemMod};
 use crate::types::{make_ident, Namespace};
 use impl_item_creator::create_impl_items;
 
-use self::{fun_codegen::gen_function, namespace_organizer::{HasNs, NamespaceEntries}, non_pod_struct::new_non_pod_struct};
+use self::{
+    fun_codegen::gen_function,
+    namespace_organizer::{HasNs, NamespaceEntries},
+    non_pod_struct::new_non_pod_struct,
+};
 
-use super::{analysis::{fun::FnAnalysis, pod::PodAnalysis}, api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use}};
+use super::{
+    analysis::{fun::FnAnalysis, pod::PodAnalysis},
+    api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use},
+};
 use quote::quote;
 
 unzip_n::unzip_n!(pub 3);
@@ -77,10 +84,7 @@ impl<'a> RsCodeGenerator<'a> {
             .into_iter()
             .map(|api| {
                 let gen = Self::generate_rs_for_api(&api.ns, api.detail);
-                (
-                    (api.ns, api.id, gen),
-                    api.additional_cpp,
-                )
+                ((api.ns, api.id, gen), api.additional_cpp)
             })
             .unzip();
         // And work out what we need for the bindgen mod.
@@ -296,10 +300,7 @@ impl<'a> RsCodeGenerator<'a> {
                     impl_entry: None,
                 }
             }
-            ApiDetail::Function {
-                fun,
-                analysis
-            } => gen_function(ns, analysis),
+            ApiDetail::Function { fun, analysis } => gen_function(ns, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,

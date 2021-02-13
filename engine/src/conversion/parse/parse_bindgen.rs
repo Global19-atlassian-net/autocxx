@@ -37,7 +37,7 @@ use super::{
     type_converter::TypeConverter,
 };
 
-use super::parse_foreign_mod::{ParseForeignMod};
+use super::parse_foreign_mod::ParseForeignMod;
 
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {

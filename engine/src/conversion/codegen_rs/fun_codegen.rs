@@ -12,12 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use syn::{Attribute, FnArg, ForeignItem, Ident, ImplItem, ReturnType, Visibility, parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe};
 use quote::quote;
+use syn::{
+    parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg,
+    ForeignItem, Ident, ImplItem, ReturnType, Visibility,
+};
 
-use crate::{conversion::{analysis::fun::{ArgumentAnalysis, FnAnalysis, FnAnalysisBody}, api::{Api, FuncToConvert, ImplBlockDetails, Use}, parse::unqualify::{unqualify_params, unqualify_ret_type}}, types::{Namespace, TypeName}};
-use crate::types::make_ident;
 use super::RsCodegenResult;
+use crate::types::make_ident;
+use crate::{
+    conversion::{
+        analysis::fun::{ArgumentAnalysis, FnAnalysis, FnAnalysisBody},
+        api::{Api, FuncToConvert, ImplBlockDetails, Use},
+        parse::unqualify::{unqualify_params, unqualify_ret_type},
+    },
+    types::{Namespace, TypeName},
+};
 
 pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodegenResult {
     let rename_using_rust_attr = analysis.rename_using_rust_attr;

@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::{api::{FuncToConvert, ImplBlockDetails, UnanalyzedApi}, codegen_cpp::function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}};
+use crate::conversion::{
+    api::{FuncToConvert, ImplBlockDetails, UnanalyzedApi},
+    codegen_cpp::function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
+};
 use crate::{
     conversion::ConvertError,
     conversion::{api::ApiDetail, codegen_cpp::AdditionalNeed},
@@ -106,10 +109,7 @@ impl ParseForeignMod {
     /// Indicate that all foreign mods and all impl blocks have been
     /// fed into us, and we should process that information to generate
     /// the resulting APIs.
-    pub(crate) fn finished(
-        &mut self,
-        apis: &mut Vec<UnanalyzedApi>,
-    ) -> Result<(), ConvertError> {
+    pub(crate) fn finished(&mut self, apis: &mut Vec<UnanalyzedApi>) -> Result<(), ConvertError> {
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
             fun.self_ty = self.method_receivers.get(&fun.item.sig.ident).cloned();
@@ -117,10 +117,10 @@ impl ParseForeignMod {
                 ns: self.ns.clone(),
                 id: fun.item.sig.ident.clone(),
                 use_stmt: Use::Unused, // filled in later - TODO make all these compile-time safe
-                deps: HashSet::new(), // filled in later
+                deps: HashSet::new(),  // filled in later
                 id_for_allowlist: None, // filled in later
-                additional_cpp: None, // filled in later
-                detail: ApiDetail::Function { fun, analysis: () }
+                additional_cpp: None,  // filled in later
+                detail: ApiDetail::Function { fun, analysis: () },
             })
         }
         Ok(())

@@ -23,7 +23,7 @@ use crate::types::make_ident;
 use crate::{
     conversion::{
         analysis::fun::{ArgumentAnalysis, FnAnalysisBody},
-        api::{ImplBlockDetails, Use},
+        api::ImplBlockDetails,
         parse::unqualify::{unqualify_params, unqualify_ret_type},
     },
     types::{Namespace, TypeName},
@@ -46,7 +46,6 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     // CUT HERE
 
     let mut cpp_name_attr = Vec::new();
-    let use_alias_required = None;
     let mut impl_entry = None;
     if cxxbridge_name != rust_name {
         if let Some(type_name) = &self_ty {
@@ -111,18 +110,6 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
         #(#cpp_name_attr)*
         #vis #unsafety fn #cxxbridge_name ( #params ) #ret_type;
     ));
-    let (id, use_stmt, id_for_allowlist) = if is_a_method {
-        (
-            make_ident(&rust_name),
-            Use::Unused,
-            self_ty.map(|ty| make_ident(ty.get_final_ident())),
-        )
-    } else {
-        match use_alias_required {
-            None => (make_ident(&rust_name), Use::Used, None),
-            Some(alias) => (cxxbridge_name, Use::UsedWithAlias(alias), None),
-        }
-    };
     RsCodegenResult {
         extern_c_mod_item: Some(extern_c_mod_item),
         bridge_items: Vec::new(),

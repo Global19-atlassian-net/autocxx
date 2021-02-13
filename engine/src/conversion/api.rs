@@ -85,6 +85,7 @@ pub(crate) enum TypeKind {
 
 /// Whether and how this type should be exposed in the mods constructed
 /// for actual end-user use.
+#[derive(Clone)]
 pub(crate) enum Use {
     Unused,
     Used,

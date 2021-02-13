@@ -22,7 +22,7 @@ use syn::{
 
 use crate::{
     conversion::{
-        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
+        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi, Use},
         codegen_cpp::{
             function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
             AdditionalNeed,
@@ -52,7 +52,6 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) is_a_method: bool,
     pub(crate) vis: Visibility,
-    pub(crate) use_alias_required: Option<Ident>, // TODO simplify into a NamingStrategy
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -124,6 +123,9 @@ impl<'a> FnAnalyzer<'a> {
         overload_trackers_by_mod: &mut HashMap<Namespace, OverloadTracker>,
     ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
         let mut new_deps = api.deps.clone();
+        let mut new_use_stmt = api.use_stmt.clone();
+        let mut new_id_for_allowlist = api.id_for_allowlist.clone();
+        let mut new_additional_cpp = api.additional_cpp.clone();
         let api_detail = match api.detail {
             // No changes to any of these...
             ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
@@ -133,7 +135,13 @@ impl<'a> FnAnalyzer<'a> {
                 let analysis = self.analyze_foreign_fn(&api.ns, &fun, overload_tracker)?;
                 match analysis {
                     None => return Ok(None),
-                    Some(analysis) => ApiDetail::Function { fun, analysis },
+                    Some((analysis, fn_uses, fn_deps, fn_id_for_allowlist, fn_additional_cpp)) => {
+                        new_deps = fn_deps;
+                        new_use_stmt = fn_uses;
+                        new_id_for_allowlist = fn_id_for_allowlist;
+                        new_additional_cpp = fn_additional_cpp;
+                        ApiDetail::Function { fun, analysis }
+                    }
                 }
             }
             ApiDetail::Const { const_item } => ApiDetail::Const { const_item },
@@ -157,10 +165,10 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Some(Api {
             ns: api.ns,
             id: api.id,
-            use_stmt: api.use_stmt, // TODO muchly incorrect now
+            use_stmt: new_use_stmt,
             deps: new_deps,
-            id_for_allowlist: api.id_for_allowlist,
-            additional_cpp: api.additional_cpp,
+            id_for_allowlist: new_id_for_allowlist,
+            additional_cpp: new_additional_cpp,
             detail: api_detail,
         }))
     }
@@ -218,7 +226,16 @@ impl<'a> FnAnalyzer<'a> {
         ns: &Namespace,
         func_information: &FuncToConvert,
         overload_tracker: &mut OverloadTracker,
-    ) -> Result<Option<FnAnalysisBody>, ConvertError> {
+    ) -> Result<
+        Option<(
+            FnAnalysisBody,
+            Use,
+            HashSet<TypeName>,
+            Option<Ident>,
+            Option<AdditionalNeed>,
+        )>,
+        ConvertError,
+    > {
         let fun = &func_information.item;
         let virtual_this = &func_information.virtual_this_type;
         // This function is one of the most complex parts of our conversion.
@@ -486,22 +503,41 @@ impl<'a> FnAnalyzer<'a> {
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
         let vis = func_information.item.vis.clone();
 
-        Ok(Some(FnAnalysisBody {
-            rename_using_rust_attr,
-            cxxbridge_name,
-            rust_name,
-            params,
-            self_ty,
-            ret_type,
-            is_constructor,
-            param_details,
-            cpp_call_name,
-            wrapper_function_needed,
-            requires_unsafe,
-            is_a_method,
-            vis,
-            use_alias_required,
-        }))
+        let (id, use_stmt, id_for_allowlist) = if is_a_method {
+            (
+                make_ident(&rust_name),
+                Use::Unused,
+                self_ty.clone().map(|ty| make_ident(ty.get_final_ident())),
+            )
+        } else {
+            match use_alias_required {
+                None => (make_ident(&rust_name), Use::Used, None),
+                Some(alias) => (cxxbridge_name.clone(), Use::UsedWithAlias(alias), None),
+            }
+        };
+
+        // TODO work out what 'id' was used for
+        Ok(Some((
+            FnAnalysisBody {
+                rename_using_rust_attr,
+                cxxbridge_name,
+                rust_name,
+                params,
+                self_ty,
+                ret_type,
+                is_constructor,
+                param_details,
+                cpp_call_name,
+                wrapper_function_needed,
+                requires_unsafe,
+                is_a_method,
+                vis,
+            },
+            use_stmt,
+            deps,
+            id_for_allowlist,
+            additional_cpp,
+        )))
     }
 
     /// Returns additionally a Boolean indicating whether an argument was

@@ -15,15 +15,15 @@
 use quote::quote;
 use syn::{
     parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg,
-    ForeignItem, Ident, ImplItem, ReturnType, Visibility,
+    ForeignItem, Ident, ImplItem, ReturnType,
 };
 
 use super::RsCodegenResult;
 use crate::types::make_ident;
 use crate::{
     conversion::{
-        analysis::fun::{ArgumentAnalysis, FnAnalysis, FnAnalysisBody},
-        api::{Api, FuncToConvert, ImplBlockDetails, Use},
+        analysis::fun::{ArgumentAnalysis, FnAnalysisBody},
+        api::{ImplBlockDetails, Use},
         parse::unqualify::{unqualify_params, unqualify_ret_type},
     },
     types::{Namespace, TypeName},
@@ -46,7 +46,7 @@ pub(crate) fn gen_function(ns: &Namespace, analysis: FnAnalysisBody) -> RsCodege
     // CUT HERE
 
     let mut cpp_name_attr = Vec::new();
-    let mut use_alias_required = None;
+    let use_alias_required = None;
     let mut impl_entry = None;
     if cxxbridge_name != rust_name {
         if let Some(type_name) = &self_ty {

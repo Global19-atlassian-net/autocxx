@@ -12,34 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::conversion::{
-    api::{FuncToConvert, ImplBlockDetails, UnanalyzedApi},
-    codegen_cpp::function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
-};
+use crate::conversion::api::{FuncToConvert, UnanalyzedApi};
 use crate::{
+    conversion::api::ApiDetail,
     conversion::ConvertError,
-    conversion::{api::ApiDetail, codegen_cpp::AdditionalNeed},
-    types::{make_ident, Namespace, TypeName},
+    types::{Namespace, TypeName},
 };
-use quote::quote;
 use std::collections::{HashMap, HashSet};
-use syn::{
-    parse::Parser, parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg,
-    ForeignItem, ForeignItemFn, Ident, ImplItem, ItemImpl, LitStr, Pat, ReturnType, Type, TypePtr,
-};
+use syn::{ForeignItem, Ident, ImplItem, ItemImpl, Type};
 
-use super::{
-    super::api::Use,
-    overload_tracker::OverloadTracker,
-    unqualify::{unqualify_params, unqualify_ret_type},
-};
+use super::super::api::Use;
 
 /// Converts a given bindgen-generated 'mod' into suitable
 /// cxx::bridge runes. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
 pub(crate) struct ParseForeignMod {
     ns: Namespace,
-    overload_tracker: OverloadTracker,
     // We mostly act upon the functions we see within the 'extern "C"'
     // block of bindgen output, but we can't actually do this until
     // we've seen the (possibly subsequent) 'impl' blocks so we can
@@ -56,7 +44,6 @@ impl ParseForeignMod {
     pub(crate) fn new(ns: Namespace) -> Self {
         Self {
             ns,
-            overload_tracker: OverloadTracker::new(),
             funcs_to_convert: Vec::new(),
             method_receivers: HashMap::new(),
         }

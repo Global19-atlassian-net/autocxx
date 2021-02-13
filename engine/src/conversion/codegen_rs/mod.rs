@@ -35,7 +35,7 @@ use self::{
 };
 
 use super::{
-    analysis::{fun::FnAnalysis, pod::PodAnalysis},
+    analysis::fun::FnAnalysis,
     api::{Api, ApiAnalysis, ApiDetail, ImplBlockDetails, TypeApiDetails, TypeKind, Use},
 };
 use quote::quote;
@@ -300,7 +300,7 @@ impl<'a> RsCodeGenerator<'a> {
                     impl_entry: None,
                 }
             }
-            ApiDetail::Function { fun, analysis } => gen_function(ns, analysis),
+            ApiDetail::Function { fun: _, analysis } => gen_function(ns, analysis),
             ApiDetail::Const { const_item } => RsCodegenResult {
                 global_items: vec![Item::Const(const_item)],
                 impl_entry: None,

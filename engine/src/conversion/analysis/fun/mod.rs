@@ -16,16 +16,13 @@ use std::collections::{HashMap, HashSet};
 
 use autocxx_parser::{TypeDatabase, UnsafePolicy};
 use syn::{
-    parse_quote, punctuated::Punctuated, token::Unsafe, Attribute, FnArg, ForeignItem,
-    ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type, TypePtr, Visibility,
+    parse_quote, punctuated::Punctuated, FnArg, ForeignItemFn, Ident, LitStr, Pat, ReturnType,
+    Type, TypePtr, Visibility,
 };
 
 use crate::{
     conversion::{
-        api::{
-            Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, UnanalyzedApi,
-            Use,
-        },
+        api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, TypeKind, UnanalyzedApi},
         codegen_cpp::{
             function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload},
             AdditionalNeed,
@@ -38,7 +35,6 @@ use crate::{
     },
     types::{make_ident, Namespace, TypeName},
 };
-use quote::quote;
 
 use super::pod::{ByValueChecker, PodAnalysis};
 
@@ -56,6 +52,7 @@ pub(crate) struct FnAnalysisBody {
     pub(crate) requires_unsafe: bool,
     pub(crate) is_a_method: bool,
     pub(crate) vis: Visibility,
+    pub(crate) use_alias_required: Option<Ident>, // TODO simplify into a NamingStrategy
 }
 
 pub(crate) struct ArgumentAnalysis {
@@ -503,6 +500,7 @@ impl<'a> FnAnalyzer<'a> {
             requires_unsafe,
             is_a_method,
             vis,
+            use_alias_required,
         }))
     }
 

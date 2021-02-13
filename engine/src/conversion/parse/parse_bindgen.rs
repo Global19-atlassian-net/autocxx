@@ -23,17 +23,14 @@ use crate::{
     types::make_ident,
     types::Namespace,
     types::TypeName,
-    UnsafePolicy,
 };
 use autocxx_parser::TypeDatabase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_quote, Fields, Item, Type};
+use syn::{parse_quote, Fields, Item};
 
 use super::{
     super::{api::Use, utilities::generate_utilities},
-    bridge_name_tracker::BridgeNameTracker,
-    rust_name_tracker::RustNameTracker,
     type_converter::TypeConverter,
 };
 
@@ -42,10 +39,7 @@ use super::parse_foreign_mod::ParseForeignMod;
 /// Parses a bindgen mod in order to understand the APIs within it.
 pub(crate) struct ParseBindgen<'a> {
     type_converter: &'a mut TypeConverter,
-    byvalue_checker: &'a ByValueChecker,
     type_database: &'a TypeDatabase,
-    bridge_name_tracker: BridgeNameTracker,
-    rust_name_tracker: RustNameTracker,
     incomplete_types: HashSet<TypeName>,
     results: ParseResults,
     /// Here we track the last struct which bindgen told us about.
@@ -63,9 +57,6 @@ impl<'a> ParseBindgen<'a> {
     ) -> Self {
         ParseBindgen {
             type_converter,
-            byvalue_checker,
-            bridge_name_tracker: BridgeNameTracker::new(),
-            rust_name_tracker: RustNameTracker::new(),
             type_database,
             incomplete_types: HashSet::new(),
             results: ParseResults {

@@ -23,7 +23,7 @@ use crate::{
     types::{make_ident, Namespace},
 };
 
-use super::{fun::FnAnalysis, pod::PodAnalysis};
+use super::fun::FnAnalysis;
 
 pub(crate) fn append_ctype_information(apis: &mut Vec<Api<FnAnalysis>>) {
     let ctypes: HashSet<_> = apis

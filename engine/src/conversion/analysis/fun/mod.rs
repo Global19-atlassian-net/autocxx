@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use autocxx_parser::{TypeDatabase, UnsafePolicy};
 use syn::{Attribute, FnArg, ForeignItem, ForeignItemFn, Ident, LitStr, Pat, ReturnType, Type, TypePtr, Visibility, parse_quote, punctuated::Punctuated, token::Unsafe};
 
-use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, UnanalyzedApi, Use}, codegen_cpp::{AdditionalNeed, function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}}, parse::{bridge_name_tracker::BridgeNameTracker, overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker, type_converter::TypeConverter}}, known_types::TypeDatabase, types::{Namespace, TypeName, make_ident}};
+use crate::{conversion::{ConvertError, api::{Api, ApiAnalysis, ApiDetail, FuncToConvert, ImplBlockDetails, TypeKind, UnanalyzedApi, Use}, codegen_cpp::{AdditionalNeed, function_wrapper::{ArgumentConversion, FunctionWrapper, FunctionWrapperPayload}}, parse::{bridge_name_tracker::BridgeNameTracker, overload_tracker::OverloadTracker, rust_name_tracker::RustNameTracker, type_converter::TypeConverter}}, types::{Namespace, TypeName, make_ident}};
 use quote::quote;
 
 use super::pod::{ByValueChecker, PodAnalysis};
@@ -75,7 +75,7 @@ pub(crate) struct FnAnalyzer<'a> {
 
 impl<'a> FnAnalyzer<'a> {
     pub(crate) fn analyze_functions(apis: Vec<Api<PodAnalysis>>, unsafe_policy: UnsafePolicy, type_converter: &'a mut TypeConverter, byvalue_checker: &'a ByValueChecker, type_database: &'a TypeDatabase) -> Result<Vec<Api<FnAnalysis>>,ConvertError> {
-        let me = Self {
+        let mut me = Self {
             unsafe_policy,
             rust_name_tracker: RustNameTracker::new(),
             extra_apis: Vec::new(),
@@ -102,14 +102,14 @@ impl<'a> FnAnalyzer<'a> {
         api: Api<PodAnalysis>,
         overload_trackers_by_mod: &mut HashMap<Namespace,OverloadTracker>
     ) -> Result<Option<Api<FnAnalysis>>, ConvertError> {
-        let mut new_deps = api.deps;
+        let mut new_deps = api.deps.clone();
         let api_detail = match api.detail {
             // No changes to any of these...
             ApiDetail::ConcreteType(details) => ApiDetail::ConcreteType(details),
             ApiDetail::StringConstructor => ApiDetail::StringConstructor,
             ApiDetail::Function{ fun, analysis: _ } => {
-                let overload_tracker = overload_trackers_by_mod.entry(api.ns).or_default();
-                let analysis = self.analyze_foreign_fn(api, &fun, overload_tracker)?;
+                let overload_tracker = overload_trackers_by_mod.entry(api.ns.clone()).or_default();
+                let analysis = self.analyze_foreign_fn(&api.ns, &fun, overload_tracker)?;
                 match analysis {
                     None => return Ok(None),
                     Some(analysis) => ApiDetail::Function { fun, analysis }
@@ -130,7 +130,7 @@ impl<'a> FnAnalyzer<'a> {
         Ok(Some(Api {
             ns: api.ns,
             id: api.id,
-            use_stmt: api.use_stmt,
+            use_stmt: api.use_stmt, // TODO muchly incorrect now
             deps: new_deps,
             id_for_allowlist: api.id_for_allowlist,
             additional_cpp: api.additional_cpp,
@@ -179,7 +179,7 @@ impl<'a> FnAnalyzer<'a> {
 
     fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
         self.type_database.is_on_blocklist(&type_name.to_cpp_name())
-            || self.incomplete_types.contains(type_name)
+            //|| self.incomplete_types.contains(type_name) // TODO
     }
 
     fn should_be_unsafe(&self) -> bool {
@@ -188,13 +188,12 @@ impl<'a> FnAnalyzer<'a> {
 
     fn analyze_foreign_fn(
         &mut self,
-        api: Api<PodAnalysis>,
+        ns: &Namespace,
         func_information: &FuncToConvert,
         overload_tracker: &mut OverloadTracker,
     ) -> Result<Option<FnAnalysisBody>, ConvertError> {
-        let fun = func_information.item;
-        let virtual_this = func_information.virtual_this_type;
-        let ns = &self.ns.clone();
+        let fun = &func_information.item;
+        let virtual_this = &func_information.virtual_this_type;
         // This function is one of the most complex parts of our conversion.
         // It needs to consider:
         // 1. Rejecting destructors entirely.
@@ -217,11 +216,11 @@ impl<'a> FnAnalyzer<'a> {
         let (param_details, bads): (Vec<_>, Vec<_>) = fun
             .sig
             .inputs
-            .into_iter()
+            .iter()
             .map(|i| {
                 self.convert_fn_arg(
                     i,
-                    ns,
+                    &ns,
                     diagnostic_display_name,
                     virtual_this.clone(),
                     &reference_params,
@@ -253,7 +252,7 @@ impl<'a> FnAnalyzer<'a> {
         let is_static_method = if self_ty.is_none() {
             // Even if we can't find a 'self' parameter this could conceivably
             // be a static method.
-            self_ty = func_information.self_ty;
+            self_ty = func_information.self_ty.clone();
             self_ty.is_some()
         } else {
             false
@@ -325,7 +324,7 @@ impl<'a> FnAnalyzer<'a> {
         let cxxbridge_name = self.get_cxx_bridge_name(
             self_ty.as_ref().map(|ty| ty.get_final_ident()),
             &rust_name,
-            &api.ns,
+            &ns,
         );
         let mut cxxbridge_name = make_ident(&cxxbridge_name);
 
@@ -347,7 +346,7 @@ impl<'a> FnAnalyzer<'a> {
                 deps: these_deps,
             }
         } else {
-            self.convert_return_type(fun.sig.output, ns, reference_return)?
+            self.convert_return_type(&fun.sig.output, &ns, reference_return)?
         };
         let mut deps = params_deps;
         deps.extend(return_analysis.deps.drain());
@@ -452,7 +451,7 @@ impl<'a> FnAnalyzer<'a> {
                 // different namespaces.
                 let rust_name_ok = self.ok_to_use_rust_name(&rust_name);
                 if rust_name_ok {
-                    rename_using_rust_attr = Some(rust_name);
+                    rename_using_rust_attr = Some(rust_name.clone()); // TODO no need to duplicate rust_name
                 } else {
                     use_alias_required = Some(make_ident(&rust_name));
                 }
@@ -460,7 +459,7 @@ impl<'a> FnAnalyzer<'a> {
         }
 
         let requires_unsafe = requires_unsafe || self.should_be_unsafe();
-        let vis = func_information.item.vis;
+        let vis = func_information.item.vis.clone();
 
         Ok(Some(FnAnalysisBody {
             rename_using_rust_attr,
@@ -483,15 +482,16 @@ impl<'a> FnAnalyzer<'a> {
     /// 'this' and another one indicating whether we took a type by value
     /// and that type was non-trivial.
     fn convert_fn_arg(
-        &self,
-        arg: FnArg,
+        &mut self,
+        arg: &FnArg,
         ns: &Namespace,
         fn_name: &str,
         virtual_this: Option<TypeName>,
         reference_args: &HashSet<Ident>,
     ) -> Result<(FnArg, ArgumentAnalysis), ConvertError> {
         Ok(match arg {
-            FnArg::Typed(mut pt) => {
+            FnArg::Typed(pt) => {
+                let mut pt = pt.clone();
                 let mut self_type = None;
                 let old_pat = *pt.pat;
                 let mut virtual_this_encountered = false;
@@ -595,8 +595,8 @@ impl<'a> FnAnalyzer<'a> {
     }
 
     fn convert_return_type(
-        &self,
-        rt: ReturnType,
+        &mut self,
+        rt: &ReturnType,
         ns: &Namespace,
         convert_ptr_to_reference: bool,
     ) -> Result<ReturnTypeAnalysis, ConvertError> {
@@ -608,13 +608,14 @@ impl<'a> FnAnalyzer<'a> {
                 deps: HashSet::new(),
             },
             ReturnType::Type(rarrow, boxed_type) => {
+                // TODO remove the below clone
                 let (boxed_type, deps, _) =
-                    self.convert_boxed_type(boxed_type, ns, convert_ptr_to_reference)?;
+                    self.convert_boxed_type(boxed_type.clone(), ns, convert_ptr_to_reference)?;
                 let was_reference = matches!(boxed_type.as_ref(), Type::Reference(_));
                 let conversion =
                     self.return_type_conversion_details(boxed_type.as_ref());
                 ReturnTypeAnalysis {
-                    rt: ReturnType::Type(rarrow, boxed_type),
+                    rt: ReturnType::Type(rarrow.clone(), boxed_type),
                     conversion: Some(conversion),
                     was_reference,
                     deps,

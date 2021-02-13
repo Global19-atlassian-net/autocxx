@@ -76,8 +76,9 @@ impl<'a> RsCodeGenerator<'a> {
         let (rs_codegen_results_and_namespaces, additional_cpp_needs): (Vec<_>, Vec<_>) = all_apis
             .into_iter()
             .map(|api| {
+                let gen = Self::generate_rs_for_api(&api.ns, api.detail);
                 (
-                    (api.ns, api.id, Self::generate_rs_for_api(api.ns, api.detail)),
+                    (api.ns, api.id, gen),
                     api.additional_cpp,
                 )
             })
@@ -255,7 +256,7 @@ impl<'a> RsCodeGenerator<'a> {
         output_items
     }
 
-    fn generate_rs_for_api(ns: Namespace, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
+    fn generate_rs_for_api(ns: &Namespace, api_detail: ApiDetail<FnAnalysis>) -> RsCodegenResult {
         match api_detail {
             ApiDetail::StringConstructor => RsCodegenResult {
                 extern_c_mod_item: Some(ForeignItem::Fn(parse_quote!(
@@ -356,8 +357,6 @@ impl<'a> RsCodeGenerator<'a> {
             }
         })]
     }
-
-    fn gen_function(&self, fun_analysis: )
 }
 
 impl HasNs for (Namespace, Ident, RsCodegenResult) {
@@ -372,7 +371,7 @@ impl<T: ApiAnalysis> HasNs for Api<T> {
     }
 }
 
-struct RsCodegenResult {
+pub(crate) struct RsCodegenResult {
     extern_c_mod_item: Option<ForeignItem>,
     bridge_items: Vec<Item>,
     global_items: Vec<Item>,

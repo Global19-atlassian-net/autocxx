@@ -99,7 +99,6 @@ impl<'a> BridgeConverter<'a> {
                 let parser = ParseBindgen::new(
                     &byvalue_checker,
                     &self.type_database,
-                    unsafe_policy,
                     &mut type_converter,
                 );
                 let parse_results = parser.convert_items(items_in_root, exclude_utilities)?;
@@ -112,7 +111,7 @@ impl<'a> BridgeConverter<'a> {
                 // Some will be simple entries in the cxx::bridge module; others will
                 // require C++ wrapper functions.
                 let analyzed_apis =
-                    FnAnalyzer::analyze_functions(analyzed_apis)?;
+                    FnAnalyzer::analyze_functions(analyzed_apis, unsafe_policy, &mut type_converter, &byvalue_checker, self.type_database)?;
                 // We now garbage collect the ones we don't need...
                 let mut analyzed_apis = filter_apis_by_following_edges_from_allowlist(
                     analyzed_apis,

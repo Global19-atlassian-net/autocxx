@@ -31,33 +31,6 @@ use super::{
     unqualify::{unqualify_params, unqualify_ret_type},
 };
 
-/// Ways in which the conversion of a given extern "C" mod can
-/// have more global effects or require more global knowledge outside
-/// of its immediate conversion.
-pub(crate) trait ForeignModParseCallbacks {
-    fn convert_boxed_type(
-        &mut self,
-        ty: Box<Type>,
-        ns: &Namespace,
-        convert_ptrs_to_reference: bool,
-    ) -> Result<(Box<Type>, HashSet<TypeName>, bool), ConvertError>;
-    fn is_pod(&self, ty: &TypeName) -> bool;
-    fn add_api(&mut self, api: UnanalyzedApi);
-    fn get_cxx_bridge_name(
-        &mut self,
-        type_name: Option<&str>,
-        found_name: &str,
-        ns: &Namespace,
-    ) -> String;
-    fn ok_to_use_rust_name(&mut self, rust_name: &str) -> bool;
-    fn is_on_allowlist(&self, type_name: &TypeName) -> bool;
-    fn avoid_generating_type(&self, type_name: &TypeName) -> bool;
-    /// In the future, this will take details of the function
-    /// we're generating, in order to determine whether it should be unsafe
-    /// according to a more nuanced policy.
-    fn should_be_unsafe(&self) -> bool;
-}
-
 /// Converts a given bindgen-generated 'mod' into suitable
 /// cxx::bridge runes. In bindgen output, a given mod concerns
 /// a specific C++ namespace.
@@ -135,13 +108,13 @@ impl ParseForeignMod {
     /// the resulting APIs.
     pub(crate) fn finished(
         &mut self,
-        callbacks: &mut impl ForeignModParseCallbacks,
+        apis: &mut Vec<UnanalyzedApi>,
     ) -> Result<(), ConvertError> {
         while !self.funcs_to_convert.is_empty() {
             let mut fun = self.funcs_to_convert.remove(0);
             fun.self_ty = self.method_receivers.get(&fun.item.sig.ident).cloned();
-            callbacks.add_api(UnanalyzedApi {
-                ns: self.ns,
+            apis.push(UnanalyzedApi {
+                ns: self.ns.clone(),
                 id: fun.item.sig.ident.clone(),
                 use_stmt: Use::Unused, // filled in later - TODO make all these compile-time safe
                 deps: HashSet::new(), // filled in later

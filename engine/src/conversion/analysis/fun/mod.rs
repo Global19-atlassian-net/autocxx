@@ -136,11 +136,12 @@ impl<'a> FnAnalyzer<'a> {
                 let analysis = self.analyze_foreign_fn(&api.ns, &fun, overload_tracker)?;
                 match analysis {
                     None => return Ok(None),
-                    Some((analysis, new_id, fn_uses, fn_deps, fn_id_for_allowlist, fn_additional_cpp)) => {
+                    Some((analysis, id, fn_uses, fn_deps, fn_id_for_allowlist, fn_additional_cpp)) => {
                         new_deps = fn_deps;
                         new_use_stmt = fn_uses;
                         new_id_for_allowlist = fn_id_for_allowlist;
                         new_additional_cpp = fn_additional_cpp;
+                        new_id = id;
                         ApiDetail::Function { fun, analysis }
                     }
                 }

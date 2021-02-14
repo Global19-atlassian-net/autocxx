@@ -111,8 +111,12 @@ impl<'a> FnAnalyzer<'a> {
         let mut results = Vec::new();
         let mut overload_trackers_by_mod: HashMap<Namespace, OverloadTracker> = HashMap::new();
         for api in apis {
-            if let Some(api) = me.analyze_fn_api(api, &mut overload_trackers_by_mod)? {
-                results.push(api);
+            let r = me.analyze_fn_api(api, &mut overload_trackers_by_mod);
+            match r {
+                Err(e) if e.is_ignorable() => eprintln!("Skipped function because: {}", e),
+                Err(e) => return Err(e),
+                Ok(Some(api)) => results.push(api),
+                Ok(None) => {}
             }
         }
         // TODO deal with exrta_apis

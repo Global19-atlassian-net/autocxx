@@ -40,7 +40,6 @@ use super::parse_foreign_mod::ParseForeignMod;
 pub(crate) struct ParseBindgen<'a> {
     type_converter: &'a mut TypeConverter,
     type_database: &'a TypeDatabase,
-    incomplete_types: HashSet<TypeName>,
     results: ParseResults,
     /// Here we track the last struct which bindgen told us about.
     /// Any subsequent "extern 'C'" blocks are methods belonging to that type,
@@ -58,10 +57,10 @@ impl<'a> ParseBindgen<'a> {
         ParseBindgen {
             type_converter,
             type_database,
-            incomplete_types: HashSet::new(),
             results: ParseResults {
                 apis: Vec::new(),
                 use_stmts_by_mod: HashMap::new(),
+                incomplete_types: HashSet::new(),
             },
             latest_virtual_this_type: None,
         }
@@ -116,7 +115,7 @@ impl<'a> ParseBindgen<'a> {
                     let tyname = TypeName::new(&ns, &s.ident.to_string());
                     let is_forward_declaration = Self::spot_forward_declaration(&s.fields);
                     if is_forward_declaration {
-                        self.incomplete_types.insert(tyname.clone());
+                        self.results.incomplete_types.insert(tyname.clone());
                     }
                     // cxx::bridge can't cope with type aliases to generic
                     // types at the moment.

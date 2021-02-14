@@ -86,6 +86,7 @@ pub(crate) struct FnAnalyzer<'a> {
     bridge_name_tracker: BridgeNameTracker,
     byvalue_checker: &'a ByValueChecker,
     type_database: &'a TypeDatabase,
+    incomplete_types: HashSet<TypeName>,
 }
 
 impl<'a> FnAnalyzer<'a> {
@@ -95,6 +96,7 @@ impl<'a> FnAnalyzer<'a> {
         type_converter: &'a mut TypeConverter,
         byvalue_checker: &'a ByValueChecker,
         type_database: &'a TypeDatabase,
+        incomplete_types: HashSet<TypeName>,
     ) -> Result<Vec<Api<FnAnalysis>>, ConvertError> {
         let mut me = Self {
             unsafe_policy,
@@ -104,6 +106,7 @@ impl<'a> FnAnalyzer<'a> {
             bridge_name_tracker: BridgeNameTracker::new(),
             byvalue_checker,
             type_database,
+            incomplete_types,
         };
         let mut results = Vec::new();
         let mut overload_trackers_by_mod: HashMap<Namespace, OverloadTracker> = HashMap::new();
@@ -216,7 +219,7 @@ impl<'a> FnAnalyzer<'a> {
 
     fn avoid_generating_type(&self, type_name: &TypeName) -> bool {
         self.type_database.is_on_blocklist(&type_name.to_cpp_name())
-        //|| self.incomplete_types.contains(type_name) // TODO
+            || self.incomplete_types.contains(type_name)
     }
 
     fn should_be_unsafe(&self) -> bool {

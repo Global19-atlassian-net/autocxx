@@ -119,9 +119,31 @@ impl<'a> FnAnalyzer<'a> {
                 Ok(None) => {}
             }
         }
-        // TODO deal with exrta_apis
-        assert!(me.extra_apis.is_empty());
+        results.extend(me.extra_apis.into_iter().map(Self::make_extra_api_nonpod));
         Ok(results)
+    }
+
+    /// Processing functions sometimes results in new types being materialized.
+    /// They are always currently opaque, so we'll just slap on a `TypeKind::NonPod`
+    /// to all of them and declare the Job Done.
+    /// In future, if we wanted to make these POD, we'd probably want to create
+    /// a new analysis phase prior to the POD analysis which materializes these types.
+    /// TODO - raise a github issue about that.
+    fn make_extra_api_nonpod(api: UnanalyzedApi) -> Api<FnAnalysis> {
+        let new_detail = match api.detail {
+            ApiDetail::Type{  ty_details, for_extern_c_ts, bindgen_mod_item, is_forward_declaration, analysis: _} =>
+                ApiDetail::Type{  ty_details, for_extern_c_ts, bindgen_mod_item, is_forward_declaration, analysis: TypeKind::NonPod},
+            _ => panic!("Function analysis created an extra API which wasn't a type")
+        };
+        Api {
+            ns: api.ns,
+            id: api.id,
+            use_stmt: api.use_stmt,
+            deps: api.deps,
+            id_for_allowlist: api.id_for_allowlist,
+            additional_cpp: api.additional_cpp,
+            detail: new_detail,
+        }
     }
 
     fn analyze_fn_api(

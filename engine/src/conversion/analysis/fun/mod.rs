@@ -125,6 +125,7 @@ impl<'a> FnAnalyzer<'a> {
         let mut new_deps = api.deps.clone();
         let mut new_use_stmt = api.use_stmt.clone();
         let mut new_id_for_allowlist = api.id_for_allowlist.clone();
+        let mut new_id = api.id;
         let mut new_additional_cpp = api.additional_cpp.clone();
         let api_detail = match api.detail {
             // No changes to any of these...
@@ -135,7 +136,7 @@ impl<'a> FnAnalyzer<'a> {
                 let analysis = self.analyze_foreign_fn(&api.ns, &fun, overload_tracker)?;
                 match analysis {
                     None => return Ok(None),
-                    Some((analysis, fn_uses, fn_deps, fn_id_for_allowlist, fn_additional_cpp)) => {
+                    Some((analysis, new_id, fn_uses, fn_deps, fn_id_for_allowlist, fn_additional_cpp)) => {
                         new_deps = fn_deps;
                         new_use_stmt = fn_uses;
                         new_id_for_allowlist = fn_id_for_allowlist;
@@ -164,7 +165,7 @@ impl<'a> FnAnalyzer<'a> {
         };
         Ok(Some(Api {
             ns: api.ns,
-            id: api.id,
+            id: new_id,
             use_stmt: new_use_stmt,
             deps: new_deps,
             id_for_allowlist: new_id_for_allowlist,
@@ -229,6 +230,7 @@ impl<'a> FnAnalyzer<'a> {
     ) -> Result<
         Option<(
             FnAnalysisBody,
+            Ident,
             Use,
             HashSet<TypeName>,
             Option<Ident>,
@@ -533,6 +535,7 @@ impl<'a> FnAnalyzer<'a> {
                 is_a_method,
                 vis,
             },
+            id,
             use_stmt,
             deps,
             id_for_allowlist,
